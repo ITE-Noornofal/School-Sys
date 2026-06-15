@@ -1,0 +1,38 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+ public function up(): void
+{
+   Schema::create('payments', function (Blueprint $table) {
+    $table->id();
+
+    $table->foreignId('guardian_id')->constrained()->onDelete('cascade'); // ولي الأمر
+    $table->foreignId('accountant_id')->nullable()->constrained()->onDelete('set null'); // المحاسب
+    $table->decimal('amount', 10, 2);
+    $table->date('payment_date');
+    $table->string('method')->nullable(); // نقداً، تحويل بنكي، إلخ
+    $table->text('note')->nullable();
+    $table->enum('status', ['unpaid', 'paid'])->default('paid'); // إضافة عمود الحالة
+
+    $table->timestamps();
+});
+
+}
+
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('payments');
+    }
+};
