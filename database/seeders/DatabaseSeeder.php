@@ -8,19 +8,10 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        //  مع الدفعات أولًا: إدخال الصفوف
         $this->call([
-           GradeWithPaymentsSeeder::class,
-        ]);
-
-
-        // ثالثًا: تشغيل صلاحيات وأدوار
-        $this->call([
-            RolesAndPermissionsSeeder::class,
-        ]);
-
-         // ثالثًا: تشغيل صلاحيات وأدوار
-        $this->call([
+            UsersSeeder::class,              // ← أولاً: إنشاء المستخدمين
+            RolesAndPermissionsSeeder::class, // ← ثانياً: إنشاء الأدوار وربطها
+            GradeWithPaymentsSeeder::class,
             SupervisorGradeSeeder::class,
         ]);
     }

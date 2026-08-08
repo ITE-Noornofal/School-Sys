@@ -3,81 +3,60 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use App\Models\Grade;
-use App\Models\DuePaymentTemplate;
-use App\Models\ClassRoom;
+use App\Models\GradeLevel;
+use App\Models\Guardian;
+use App\Models\Accountant;
+use App\Models\Payment;
 
 class GradeWithPaymentsSeeder extends Seeder
 {
     public function run()
     {
-        $grades = [
-            'Grade 1',
-            'Grade 2',
-            'Grade 3',
-            'Grade 4',
-            'Grade 5',
-            'Grade 6',
-            'Grade 7',
-            'Grade 8',
-            'Grade 9',
-            'Grade 10',
-            'Grade 11',
-            'Grade 12',
+        // ─── إنشاء Grade Levels (الصفوف الدراسية) ───
+        $gradeLevels = [
+            ['id' => 1, 'name' => 'الصف الأول'],
+            ['id' => 2, 'name' => 'الصف الثاني'],
+            ['id' => 3, 'name' => 'الصف الثالث'],
+            ['id' => 4, 'name' => 'الصف الرابع'],
+            ['id' => 5, 'name' => 'الصف الخامس'],
+            ['id' => 6, 'name' => 'الصف السادس'],
         ];
 
-        foreach ($grades as $index => $name) {
-            $grade = Grade::updateOrCreate(
-                ['id' => $index + 1],
-                ['name' => $name]
+        foreach ($gradeLevels as $grade) {
+            GradeLevel::firstOrCreate(
+                ['id' => $grade['id']],
+                ['name' => $grade['name']]
             );
-
-            $baseAmount = 500 + (100 * $index); // تزداد حسب الصف
-            $registrationFee = 200 + (20 * $index); // تزداد حسب الصف
-
-            // حذف القوالب السابقة لتفادي التكرار
-            DuePaymentTemplate::where('grade_id', $grade->id)->delete();
-
-            // رسوم الفصل الأول
-            DuePaymentTemplate::create([
-                'grade_id' => $grade->id,
-                'title' => "First Semester Fee - {$grade->name}",
-                'description' => "Tuition fee for the first semester of {$grade->name}.",
-                'amount' => $baseAmount,
-                'penalty_per_day' => 10,
-            ]);
-
-            // رسوم الفصل الثاني
-            DuePaymentTemplate::create([
-                'grade_id' => $grade->id,
-                'title' => "Second Semester Fee - {$grade->name}",
-                'description' => "Tuition fee for the second semester of {$grade->name}.",
-                'amount' => $baseAmount,
-                'penalty_per_day' => 10,
-            ]);
-
-            // رسوم التسجيل السنوي
-            DuePaymentTemplate::create([
-                'grade_id' => $grade->id,
-                'title' => "Annual Registration Fee - {$grade->name}",
-                'description' => "Annual registration fee for {$grade->name}.",
-                'amount' => $registrationFee,
-                'penalty_per_day' => 5,
-            ]);
-
-            // ✅ إنشاء صفوف دراسية (ClassRooms) لكل Grade
-            for ($i = 1; $i <= 3; $i++) {
-                ClassRoom::updateOrCreate(
-                    [
-                        'grade_id' => $grade->id,
-                        'name' => "{$grade->name} - Section {$i}"
-                    ],
-                    [
-                        'grade_id' => $grade->id,
-                        'name' => "{$grade->name} - Section {$i}"
-                    ]
-                );
-            }
         }
+
+        // ─── إنشاء Guardians (إذا لم يكونوا موجودين) ───
+        $guardians = Guardian::all();
+        if ($guardians->isEmpty()) {
+            echo "⚠️ No guardians found. Creating sample guardians...\n";
+            for ($i = 1; $i <= 3; $i++) {
+                Guardian::create([
+                    'name' => 'ولي أمر ' . $i,
+                    'email' => 'guardian' . $i . '@school.com',
+                    'password' => bcrypt('password123'),
+                    'phone' => '012345678' . $i,
+                ]);
+            }
+            $guardians = Guardian::all();
+        }
+
+        // ─── إنشاء Payments ───
+        foreach ($guardians as $guardian) {
+            Payment::create([
+                'guardian_id'   => $guardian->id,
+                'accountant_id' => null, // أو Accountant::first()->id إذا موجود
+                'amount'        => rand(500, 2000),
+                'payment_date'  => now()->subDays(rand(1, 30)),
+                'method'        => ['نقداً', 'تحويل بنكي', 'بطاقة'][rand(0, 2)],
+                'note'          => 'دفع رسوم دراسية',
+                'status'        => 'paid',
+            ]);
+        }
+
+        echo "✅ Payments seeded successfully.\n";
     }
 }

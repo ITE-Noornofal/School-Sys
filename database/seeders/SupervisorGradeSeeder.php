@@ -4,7 +4,7 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\Supervisor;
-use App\Models\Grade;
+use App\Models\GradeLevel;  // ← تغيير من Grade إلى GradeLevel
 use App\Models\ClassRoom;
 use Illuminate\Support\Facades\Hash;
 use Spatie\Permission\Models\Role;
@@ -34,25 +34,25 @@ class SupervisorGradeSeeder extends Seeder
             $supervisor->assignRole($supervisorRole);
         }
 
-        // ربط المشرفين بالـ grades بالتسلسل
+        // ربط المشرفين بالـ grade_levels بالتسلسل
         $supervisors = Supervisor::orderBy('id')->take(12)->get();
-        $grades = Grade::orderBy('id')->take(12)->get();
+        $gradeLevels = GradeLevel::orderBy('id')->take(12)->get();  // ← GradeLevel
 
-        foreach ($grades as $index => $grade) {
+        foreach ($gradeLevels as $index => $gradeLevel) {  // ← $gradeLevel
             if (isset($supervisors[$index])) {
-                $grade->supervisor_id = $supervisors[$index]->id;
-                $grade->save();
+                $gradeLevel->supervisor_id = $supervisors[$index]->id;  // ← $gradeLevel
+                $gradeLevel->save();  // ← $gradeLevel
             }
         }
 
         // تحديث الـ ClassRoom لربط كل صف بالمشرف المناسب
-        $classRooms = ClassRoom::with('grade')->get();
+        $classRooms = ClassRoom::with('gradeLevel')->get();  // ← gradeLevel
 
         foreach ($classRooms as $classRoom) {
-            $gradeSupervisorId = $classRoom->grade->supervisor_id ?? null;
+            $gradeLevelSupervisorId = $classRoom->gradeLevel->supervisor_id ?? null;  // ← gradeLevel
 
-            if ($gradeSupervisorId) {
-                $classRoom->supervisor_id = $gradeSupervisorId;
+            if ($gradeLevelSupervisorId) {
+                $classRoom->supervisor_id = $gradeLevelSupervisorId;
                 $classRoom->save();
             }
         }

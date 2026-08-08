@@ -30,6 +30,11 @@ use App\Models\Complaint;
 
 
 use Illuminate\Http\Request;
+use App\Http\Controllers\API\PasswordResetController;
+//email
+Route::post('/forgot-password', [PasswordResetController::class, 'sendCode']);
+Route::post('/verify-code', [PasswordResetController::class, 'verifyCode']);
+Route::post('/reset-password', [PasswordResetController::class, 'resetPassword']);
 
 Route::prefix('student')->group(function () {
     Route::post('/register', [StudentController::class, 'registerByEmail']);

@@ -6,26 +6,25 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-    public function up()
+    public function up(): void
     {
         Schema::create('due_payment_templates', function (Blueprint $table) {
             $table->id();
-            $table->string('title');
-            $table->text('description')->nullable();
-            $table->foreignId('grade_id')->nullable()->constrained('grades')->nullOnDelete();
+
+            // ← تعديل هنا: grades → grade_levels
+            $table->foreignId('grade_level_id')  // أو حافظ على grade_id
+                  ->nullable()
+                  ->constrained('grade_levels')   // ← تحديد الجدول الصحيح
+                  ->onDelete('set null');
+
+            $table->string('name');
             $table->decimal('amount', 10, 2);
-            $table->integer('penalty_per_day')->default(10); // غرامة التأخير
+            $table->text('description')->nullable();
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
-    public function down()
+    public function down(): void
     {
         Schema::dropIfExists('due_payment_templates');
     }
