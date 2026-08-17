@@ -17,7 +17,7 @@ public function store(Request $request)
     $validated = $request->validate([
         'name' => 'required|string',
         'section' => 'nullable|string',
-        'grade_id' => 'required|exists:grades,id',
+        'grade_id' => 'required|exists:grade_levels,id',
     ]);
 
     // تحقق من وجود صف بنفس الاسم والقسم ونفس الـ grade_id
@@ -45,7 +45,7 @@ public function update(Request $request, $id)
     $validated = $request->validate([
         'name' => 'required|string|max:255',
         'section' => 'nullable|string|max:255',
-        'grade_id' => 'required|exists:grades,id',
+        'grade_id' => 'required|exists:grade_levels,id',
     ]);
 
     // البحث عن الصف (class room) حسب الـ id

@@ -3,13 +3,15 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-
-
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ClassRoom extends Model
 {
-    protected $fillable = ['name', 'section','grade_id'];
+    protected $fillable = [
+        'name',
+        'section',
+        'grade_id',
+    ];
 
     public function students()
     {
@@ -18,20 +20,20 @@ class ClassRoom extends Model
 
     public function teachers()
     {
-        return $this->belongsToMany(Teacher::class); // لاحقًا
+        return $this->belongsToMany(Teacher::class);
     }
 
-     public function grade(): BelongsTo
+    public function grade(): BelongsTo
     {
-        return $this->belongsTo(Grade::class);
+        return $this->belongsTo(GradeLevel::class, 'grade_id');
     }
 
     public function supervisor()
-{
-    return $this->belongsTo(Supervisor::class);
-}
+    {
+        return $this->belongsTo(Supervisor::class);
+    }
 
- public function bus()
+    public function bus()
     {
         return $this->belongsTo(Bus::class);
     }
@@ -41,14 +43,8 @@ class ClassRoom extends Model
         return $this->belongsTo(TargetGroup::class);
     }
 
-public function duePaymentTemplates()
-{
-    return $this->hasMany(DuePaymentTemplate::class);
+    public function duePaymentTemplates()
+    {
+        return $this->hasMany(DuePaymentTemplate::class);
+    }
 }
-
-}
-
-
-
-
-

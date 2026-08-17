@@ -4,209 +4,509 @@ namespace App\Http\Controllers\API\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use App\Models\Teacher;
+use App\Models\User;
 
 class TeacherController extends Controller
 {
-public function register(Request $request)
-{
-    $validated = $request->validate([
-        'email' => 'required|email',
-        'name' => 'nullable|string|max:255',
-        'password' => 'nullable|string|min:6|confirmed',
-        'subject' => 'nullable|string|max:255',
-        'address' => 'nullable|string|max:255',
-        'phone' => 'nullable|string|max:20',
-        'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
-    ]);
+    // =========================================================
+    // REGISTER
+    // =========================================================
 
-    $teacher = Teacher::where('email', $validated['email'])->first();
+    public function register(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'name' => 'nullable|string|max:255',
+            'password' => 'nullable|string|min:6|confirmed',
+            'subject' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ]);
 
-    if (!$teacher) {
-        return response()->json(['message' => 'Email not allowed. Contact admin.'], 403);
+        // البحث عن المعلم الذي أضافه المدير
+        $teacher = Teacher::where('email', $validated['email'])->first();
+
+        if (!$teacher) {
+            return response()->json([
+                'message' => 'Email not allowed. Contact admin.'
+            ], 403);
+        }
+
+        // منع التسجيل مرة ثانية
+        if ($teacher->password !== null) {
+            return response()->json([
+                'message' => 'Teacher already registered.'
+            ], 409);
+        }
+
+        // =====================================================
+        // PROFILE IMAGE
+        // =====================================================
+
+        $profileImagePath = null;
+
+        if ($request->hasFile('profile_image')) {
+            $profileImagePath = $request
+                ->file('profile_image')
+                ->store('teachers', 'public');
+        }
+
+        // =====================================================
+        // UPDATE TEACHER
+        // =====================================================
+
+        $updateData = [];
+
+        if (isset($validated['name'])) {
+            $updateData['name'] = $validated['name'];
+        }
+
+        if (isset($validated['password'])) {
+            $updateData['password'] = bcrypt($validated['password']);
+        }
+
+        if (isset($validated['subject'])) {
+            $updateData['subject'] = $validated['subject'];
+        }
+
+        if (isset($validated['address'])) {
+            $updateData['address'] = $validated['address'];
+        }
+
+        if (isset($validated['phone'])) {
+            $updateData['phone'] = $validated['phone'];
+        }
+
+        if ($profileImagePath !== null) {
+            $updateData['profile_image'] = $profileImagePath;
+        }
+
+        $teacher->update($updateData);
+
+        // =====================================================
+        // CREATE / UPDATE USER
+        // =====================================================
+
+        /*
+        |--------------------------------------------------------------------------
+        | users هو جدول الحسابات الموحد
+        |--------------------------------------------------------------------------
+        |
+        | حسب migration الخاص بك:
+        |
+        | Full_name
+        | phone_number
+        | address
+        | email
+        | password
+        | role
+        |
+        */
+
+        $user = User::updateOrCreate(
+            [
+                'email' => $teacher->email
+            ],
+            [
+                'Full_name' => $teacher->name,
+                'password' => $teacher->password,
+                'role' => 'teacher',
+                'phone_number' => $teacher->phone,
+                'address' => $teacher->address,
+            ]
+        );
+
+        // =====================================================
+        // ربط teacher بـ user
+        // =====================================================
+
+        if (\Schema::hasColumn('teachers', 'user_id')) {
+            $teacher->user_id = $user->id;
+            $teacher->save();
+        }
+
+        // =====================================================
+        // SPATIE ROLE
+        // =====================================================
+
+        if (method_exists($user, 'assignRole')) {
+
+            if (!$user->hasRole('teacher')) {
+                $user->assignRole('teacher');
+            }
+        }
+
+        // =====================================================
+        // TOKEN
+        // =====================================================
+
+        $token = $user
+            ->createToken('auth_token')
+            ->plainTextToken;
+
+        // =====================================================
+        // RESPONSE
+        // =====================================================
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Teacher registered successfully.',
+
+            'data' => [
+                'token' => $token,
+
+                'role' => 'teacher',
+
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->Full_name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ]
+            ]
+        ], 201);
     }
 
-    if ($teacher->password !== null) {
-        return response()->json(['message' => 'Teacher already registered.'], 409);
-    }
 
-    $profileImagePath = null;
-    if ($request->hasFile('profile_image')) {
-        $profileImagePath = $request->file('profile_image')->store('teachers', 'public');
-    }
+    // =========================================================
+    // LOGIN
+    // =========================================================
 
- $updateData = [];
+    /*
+    |--------------------------------------------------------------------------
+    | ملاحظة:
+    | هذا الـ Login موجود للحفاظ على الـ API القديم.
+    | لكن في النظام الجديد يفضل استخدام:
+    |
+    | POST /api/login
+    |
+    | من UnifiedAuthController
+    |
+    */
 
-if (isset($validated['name'])) {
-    $updateData['name'] = $validated['name'];
-}
-
-if (isset($validated['password'])) {
-    $updateData['password'] = bcrypt($validated['password']);
-}
-
-if (isset($validated['subject'])) {
-    $updateData['subject'] = $validated['subject'];
-}
-
-if (isset($validated['address'])) {
-    $updateData['address'] = $validated['address'];
-}
-
-if (isset($validated['phone'])) {
-    $updateData['phone'] = $validated['phone'];
-}
-
-if (isset($profileImagePath)) {
-    $updateData['profile_image'] = $profileImagePath;
-}
-
-$teacher->update($updateData);
-
-    $token = $teacher->createToken('teacher_token')->plainTextToken;
-    $teacher->assignRole('teacher');
-
-    // إرجاع فقط رسالة ورمز الحالة والتوكن
-   return response()->json([
-    'status'  => 'success',
-    'message' => 'Teacher registered successfully.',
-    'data'    => [
-        'token' => $token,
-        'role'  => 'teacher'
-    ]
-], 201);
-
-}
-
-    // Login
     public function login(Request $request)
     {
         $request->validate([
-            'email' => 'required|email|exists:teachers,email',
+            'email' => 'required|email',
             'password' => 'required',
         ]);
 
-        $teacher = Teacher::where('email', $request->email)->first();
+        // البحث في users
+        $user = User::where('email', $request->email)
+            ->where('role', 'teacher')
+            ->first();
 
-        if (!$teacher || !Hash::check($request->password, $teacher->password)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
+        if (
+            !$user ||
+            !$user->password ||
+            !Hash::check($request->password, $user->password)
+        ) {
+            return response()->json([
+                'message' => 'Invalid credentials'
+            ], 401);
         }
 
-        $token = $teacher->createToken('teacher_token')->plainTextToken;
+        // =====================================================
+        // جلب المعلم
+        // =====================================================
 
-    return response()->json([
-        'status'  => 'success',
-        'message' => 'Logged in successfully.',
-        'data'    => [
-            'token'   => $token,
-            'teacher' => [
-                'name'           => $teacher->name,
-                'email'          => $teacher->email,
-                'subject'        => $teacher->subject,
-                'address'        => $teacher->address,
-                'phone'          => $teacher->phone,
-                'profile_image'  => $teacher->profile_image
-                    ? asset('storage/' . $teacher->profile_image)
-                    : null,
+        $teacher = Teacher::where('email', $user->email)->first();
+
+        if (!$teacher) {
+            return response()->json([
+                'message' => 'Teacher record not found.'
+            ], 404);
+        }
+
+        // =====================================================
+        // TOKEN FROM USER
+        // =====================================================
+
+        $token = $user
+            ->createToken('auth_token')
+            ->plainTextToken;
+
+        // =====================================================
+        // RESPONSE
+        // =====================================================
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Logged in successfully.',
+
+            'data' => [
+                'token' => $token,
+
+                'role' => 'teacher',
+
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->Full_name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
+
+                'teacher' => [
+                    'id' => $teacher->id,
+                    'name' => $teacher->name,
+                    'email' => $teacher->email,
+                    'subject' => $teacher->subject,
+                    'address' => $teacher->address,
+                    'phone' => $teacher->phone,
+
+                    'profile_image' => $teacher->profile_image
+                        ? asset('storage/' . $teacher->profile_image)
+                        : null,
+                ]
             ]
-        ]
-], 200);
-
+        ], 200);
     }
 
-    // Logout
+
+    // =========================================================
+    // LOGOUT
+    // =========================================================
+
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
 
-        return response()->json(['message' => 'Logged out successfully goodbye']);
+        if ($user && $user->currentAccessToken()) {
+            $user->currentAccessToken()->delete();
+        }
+
+        return response()->json([
+            'message' => 'Logged out successfully goodbye'
+        ]);
     }
 
-    // Profile
- public function profile(Request $request)
-{
-    return response()->json([
-        'status'  => 'success',
-        'message' => 'User profile retrieved successfully.',
-        'data'    => [
-            'id'            => $request->user()->id,
-            'name'          => $request->user()->name,
-            'email'         => $request->user()->email,
-            'phone'         => $request->user()->phone ?? null,
-            'address'       => $request->user()->address ?? null,
-            'profile_image' => $request->user()->profile_image ? asset('storage/' . $request->user()->profile_image) : null,
-            // أضف الحقول التي تريدها هنا
-        ]
-    ], 200);
-}
 
+    // =========================================================
+    // PROFILE
+    // =========================================================
 
+    public function profile(Request $request)
+    {
+        $user = $request->user();
 
-  public function updateProfile(Request $request)
-{
-    $teacher = auth('teacher')->user();
+        if (!$user) {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 401);
+        }
 
-    if (!$teacher) {
-        return response()->json(['message' => 'Unauthorized'], 401);
+        if ($user->role !== 'teacher') {
+            return response()->json([
+                'message' => 'This account is not a teacher account.'
+            ], 403);
+        }
+
+        // جلب بيانات المعلم
+        $teacher = Teacher::where('email', $user->email)->first();
+
+        if (!$teacher) {
+            return response()->json([
+                'message' => 'Teacher record not found.'
+            ], 404);
+        }
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'User profile retrieved successfully.',
+
+            'data' => [
+
+                'id' => $user->id,
+
+                'name' => $teacher->name,
+
+                'email' => $user->email,
+
+                'phone' => $teacher->phone,
+
+                'address' => $teacher->address,
+
+                'subject' => $teacher->subject,
+
+                'profile_image' => $teacher->profile_image
+                    ? asset('storage/' . $teacher->profile_image)
+                    : null,
+
+                'role' => $user->role,
+            ]
+        ], 200);
     }
 
-    $validated = $request->validate([
-        'name' => 'nullable|string|max:255',
-        'password' => 'nullable|string|min:6|confirmed',
-        'subject' => 'nullable|string|max:255',
-        'address' => 'nullable|string|max:255',
-        'phone' => 'nullable|string|max:20',
-        'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
-    ]);
 
-    if (isset($validated['name'])) {
-        $teacher->name = $validated['name'];
-    }
+    // =========================================================
+    // UPDATE PROFILE
+    // =========================================================
 
-    if (isset($validated['password'])) {
-        $teacher->password = bcrypt($validated['password']);
-    }
+    public function updateProfile(Request $request)
+    {
+        /*
+        |--------------------------------------------------------------------------
+        | مهم:
+        | لم نعد نستخدم auth('teacher')
+        |
+        | لأن التوكن أصبح صادرًا من users.
+        |--------------------------------------------------------------------------
+        */
 
-    $teacher->subject = $validated['subject'] ?? $teacher->subject;
-    $teacher->address = $validated['address'] ?? $teacher->address;
-    $teacher->phone = $validated['phone'] ?? $teacher->phone;
+        $user = $request->user();
 
-    if ($request->hasFile('profile_image')) {
-        $profileImagePath = $request->file('profile_image')->store('teachers', 'public');
-        $teacher->profile_image = $profileImagePath;
-    }
+        if (!$user) {
+            return response()->json([
+                'message' => 'Unauthorized'
+            ], 401);
+        }
 
-    // تأكد أن $teacher هو نموذج صحيح قبل الحفظ
-    if (method_exists($teacher, 'save')) {
+        // التأكد أن الحساب معلم
+        if ($user->role !== 'teacher') {
+            return response()->json([
+                'message' => 'This account is not a teacher account.'
+            ], 403);
+        }
+
+        // =====================================================
+        // جلب المعلم المرتبط بالإيميل
+        // =====================================================
+
+        $teacher = Teacher::where('email', $user->email)->first();
+
+        if (!$teacher) {
+            return response()->json([
+                'message' => 'Teacher record not found.'
+            ], 404);
+        }
+
+        // =====================================================
+        // VALIDATION
+        // =====================================================
+
+        $validated = $request->validate([
+            'name' => 'nullable|string|max:255',
+            'password' => 'nullable|string|min:6|confirmed',
+            'subject' => 'nullable|string|max:255',
+            'address' => 'nullable|string|max:255',
+            'phone' => 'nullable|string|max:20',
+            'profile_image' => 'nullable|image|mimes:jpeg,png,jpg,gif,svg|max:2048',
+        ]);
+
+        // =====================================================
+        // NAME
+        // =====================================================
+
+        if (isset($validated['name'])) {
+            $teacher->name = $validated['name'];
+        }
+
+        // =====================================================
+        // PASSWORD
+        // =====================================================
+
+        if (isset($validated['password'])) {
+            $teacher->password = bcrypt(
+                $validated['password']
+            );
+        }
+
+        // =====================================================
+        // OTHER DATA
+        // =====================================================
+
+        if (array_key_exists('subject', $validated)) {
+            $teacher->subject = $validated['subject'];
+        }
+
+        if (array_key_exists('address', $validated)) {
+            $teacher->address = $validated['address'];
+        }
+
+        if (array_key_exists('phone', $validated)) {
+            $teacher->phone = $validated['phone'];
+        }
+
+        // =====================================================
+        // PROFILE IMAGE
+        // =====================================================
+
+        if ($request->hasFile('profile_image')) {
+
+            $profileImagePath = $request
+                ->file('profile_image')
+                ->store('teachers', 'public');
+
+            $teacher->profile_image = $profileImagePath;
+        }
+
+        // =====================================================
+        // SAVE TEACHER
+        // =====================================================
+
         $teacher->save();
-    } else {
-        return response()->json(['message' => 'Internal Server Error: Unable to save teacher'], 500);
+
+        // =====================================================
+        // UPDATE USER
+        // =====================================================
+
+        $user->Full_name = $teacher->name;
+
+        $user->phone_number = $teacher->phone;
+
+        $user->address = $teacher->address;
+
+        // إذا تم تغيير كلمة المرور
+        if (isset($validated['password'])) {
+            $user->password = $teacher->password;
+        }
+
+        // تأكيد Role
+        $user->role = 'teacher';
+
+        $user->save();
+
+        // =====================================================
+        // RESPONSE
+        // =====================================================
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Profile updated successfully',
+
+            'data' => [
+
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->Full_name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                    'phone' => $user->phone_number,
+                    'address' => $user->address,
+                ],
+
+                'teacher' => [
+
+                    'id' => $teacher->id,
+
+                    'name' => $teacher->name,
+
+                    'email' => $teacher->email,
+
+                    'subject' => $teacher->subject,
+
+                    'address' => $teacher->address,
+
+                    'phone' => $teacher->phone,
+
+                    'profile_image' => $teacher->profile_image
+                        ? asset('storage/' . $teacher->profile_image)
+                        : null,
+                ]
+            ]
+        ], 200);
     }
-
-   return response()->json([
-    'status' => 'success',
-    'message' => 'Profile updated successfully',
-    'data' => [
-        'teacher' => [
-            'name' => $teacher->name,
-            'email' => $teacher->email,
-            'subject' => $teacher->subject,
-            'address' => $teacher->address,
-            'phone' => $teacher->phone,
-            'profile_image' => $teacher->profile_image ? asset('storage/' . $teacher->profile_image) : null,
-        ]
-    ]
-], 200);
-
-
-
-
-
-
-
-
-
-
-}}
+}

@@ -3,167 +3,267 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
- use App\Models\Supervisor;
-use App\Models\Grade;
-use App\Models\ClassRoom;
+use App\Models\Supervisor;
+use App\Models\GradeLevel;
 use Illuminate\Support\Facades\DB;
 
-
-
-class GradeSupervisorController extends Controller//كونترولر يجعل الادمن يضيف  مشرفين  والتعديل  عليه
+class GradeSupervisorController extends Controller
 {
-public function assign(Request $request)
-{
-    $request->validate([
-        'supervisor_id' => 'required|exists:supervisors,id',
-        'grade_ids' => 'required|array',
-        'grade_ids.*' => 'exists:grades,id',
-    ]);
+    /**
+     * Assign supervisor to one or multiple grade levels
+     */
+    public function assign(Request $request)
+    {
+        $request->validate([
+            'supervisor_id' => 'required|exists:supervisors,id',
+            'grade_ids' => 'required|array|min:1',
+            'grade_ids.*' => 'required|exists:grade_levels,id',
+        ]);
 
-    $supervisorId = $request->supervisor_id;
-    $gradeIds = $request->grade_ids;
+        $supervisorId = (int) $request->supervisor_id;
+        $gradeIds = $request->grade_ids;
 
-    foreach ($gradeIds as $gradeId) {
-        $grade = Grade::find($gradeId);
+        DB::transaction(function () use ($supervisorId, $gradeIds) {
 
-        if (!$grade) {
-            continue; // skip if grade not found
-        }
+            foreach ($gradeIds as $gradeId) {
 
-        if ($grade->supervisor_id === $supervisorId) {
+                $gradeLevel = GradeLevel::findOrFail($gradeId);
+
+                // نفس المشرف معين مسبقًا
+                if ((int) $gradeLevel->supervisor_id === $supervisorId) {
+                    abort(response()->json([
+                        'success' => false,
+                        'message' => "Supervisor is already assigned to grade level ID {$gradeId}."
+                    ], 409));
+                }
+
+                // يوجد مشرف آخر معين
+                if (
+                    !is_null($gradeLevel->supervisor_id) &&
+                    (int) $gradeLevel->supervisor_id !== $supervisorId
+                ) {
+                    abort(response()->json([
+                        'success' => false,
+                        'message' => "Grade level ID {$gradeId} already has another supervisor assigned."
+                    ], 409));
+                }
+
+                // تعيين المشرف للـ GradeLevel
+                $gradeLevel->supervisor_id = $supervisorId;
+                $gradeLevel->save();
+            }
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Supervisor successfully assigned to the selected grade levels.'
+        ], 200);
+    }
+
+
+    /**
+     * Remove supervisor from a grade level
+     */
+    public function unassign(Request $request)
+    {
+        $request->validate([
+            'grade_id' => 'required|exists:grade_levels,id',
+        ]);
+
+        $gradeLevel = GradeLevel::findOrFail($request->grade_id);
+
+        // لا يوجد مشرف حاليًا
+        if (is_null($gradeLevel->supervisor_id)) {
             return response()->json([
-                'message' => "The supervisor is already assigned to grade ID {$gradeId}."
+                'success' => false,
+                'message' => 'This grade level does not have a supervisor assigned.'
             ], 409);
         }
 
-        if ($grade->supervisor_id !== null && $grade->supervisor_id !== $supervisorId) {
+        // إزالة المشرف
+        $gradeLevel->supervisor_id = null;
+        $gradeLevel->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Supervisor removed successfully from the grade level.'
+        ], 200);
+    }
+
+
+    /**
+     * Change supervisor of a grade level
+     */
+    public function change(Request $request)
+    {
+        $request->validate([
+            'grade_id' => 'required|exists:grade_levels,id',
+            'supervisor_id' => 'required|exists:supervisors,id',
+        ]);
+
+        $gradeLevel = GradeLevel::findOrFail($request->grade_id);
+
+        $newSupervisorId = (int) $request->supervisor_id;
+
+        // نفس المشرف
+        if ((int) $gradeLevel->supervisor_id === $newSupervisorId) {
             return response()->json([
-                'message' => "Grade ID {$gradeId} already has a different supervisor assigned."
+                'success' => false,
+                'message' => 'This supervisor is already assigned to the grade level.'
             ], 409);
         }
 
-        // Assign supervisor to grade
-        $grade->supervisor_id = $supervisorId;
-        $grade->save();
+        // تغيير المشرف
+        $gradeLevel->supervisor_id = $newSupervisorId;
+        $gradeLevel->save();
 
-        // Assign supervisor to related class rooms
-        ClassRoom::where('grade_id', $gradeId)
-            ->update(['supervisor_id' => $supervisorId]);
+        return response()->json([
+            'success' => true,
+            'message' => 'Supervisor changed successfully for the grade level.'
+        ], 200);
     }
 
-    return response()->json(['message' => '✅ Supervisor successfully assigned to the selected grades and their classrooms.']);
-}
 
+    /**
+     * Move supervisor from one grade level to another
+     */
+    public function move(Request $request)
+    {
+        $request->validate([
+            'supervisor_id' => 'required|exists:supervisors,id',
 
+            'from_grade_id' => [
+                'required',
+                'exists:grade_levels,id'
+            ],
 
-public function unassign(Request $request)
-{
-    $request->validate([
-        'grade_id' => 'required|exists:grades,id',
-        // إذا تريد فقط إزالة المشرف بدون تعيين آخر، اجعل supervisor_id اختياري
-        'supervisor_id' => 'nullable|exists:supervisors,id',
-    ]);
+            'to_grade_id' => [
+                'required',
+                'exists:grade_levels,id',
+                'different:from_grade_id'
+            ],
+        ]);
 
-    $grade = Grade::find($request->grade_id);
+        $supervisorId = (int) $request->supervisor_id;
 
-    if (!$grade) {
-        return response()->json(['message' => 'Grade not found.'], 404);
-    }
+        $fromGradeLevel = GradeLevel::findOrFail(
+            $request->from_grade_id
+        );
 
-    // تحقق إذا كان هناك مشرف معين حاليًا
-    if ($grade->supervisor_id === null) {
-        return response()->json(['message' => 'This grade does not have a supervisor assigned.'], 409);
-    }
+        $toGradeLevel = GradeLevel::findOrFail(
+            $request->to_grade_id
+        );
 
-    // إذا تم إرسال supervisor_id و مختلف عن المشرف الحالي، يمكن تعديل المشرف
-    if ($request->filled('supervisor_id')) {
-        if ($grade->supervisor_id === $request->supervisor_id) {
-            return response()->json(['message' => 'This supervisor is already assigned to the grade.'], 409);
+        // التأكد أن المشرف موجود على الصف القديم
+        if ((int) $fromGradeLevel->supervisor_id !== $supervisorId) {
+            return response()->json([
+                'success' => false,
+                'message' => 'This supervisor is not assigned to the source grade level.'
+            ], 403);
         }
 
-        // تحديث المشرف
-        $grade->supervisor_id = $request->supervisor_id;
-        $grade->save();
+        // التأكد أن الصف الجديد لا يملك مشرفًا
+        if (!is_null($toGradeLevel->supervisor_id)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'The target grade level already has a supervisor assigned.'
+            ], 409);
+        }
 
-        // تحديث شعب الصف
-        ClassRoom::where('grade_id', $grade->id)
-            ->update(['supervisor_id' => $request->supervisor_id]);
+        DB::transaction(function () use (
+            $fromGradeLevel,
+            $toGradeLevel,
+            $supervisorId
+        ) {
 
-        return response()->json(['message' => 'Supervisor changed successfully for the grade and its classrooms.']);
-    }
+            // إزالة المشرف من الصف القديم
+            $fromGradeLevel->supervisor_id = null;
+            $fromGradeLevel->save();
 
-    // إذا لم يتم إرسال supervisor_id، نزيل المشرف الحالي (إلغاء التعيين)
-    $grade->supervisor_id = null;
-    $grade->save();
+            // تعيين المشرف للصف الجديد
+            $toGradeLevel->supervisor_id = $supervisorId;
+            $toGradeLevel->save();
+        });
 
-    // إزالة المشرف من شعب الصف
-    ClassRoom::where('grade_id', $grade->id)
-        ->update(['supervisor_id' => null]);
-
-    return response()->json(['message' => 'Supervisor removed successfully from the grade and its classrooms.']);
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-public function move(Request $request)
-{
-    $request->validate([
-        'supervisor_id' => 'required|exists:supervisors,id',
-        'from_grade_id' => 'required|exists:grades,id',
-        'to_grade_id' => 'required|exists:grades,id|different:from_grade_id',
-    ]);
-
-    $supervisorId = $request->supervisor_id;
-    $fromGrade = Grade::findOrFail($request->from_grade_id);
-    $toGrade = Grade::findOrFail($request->to_grade_id);
-
-    if ($fromGrade->supervisor_id !== $supervisorId) {
         return response()->json([
-            'message' => '❌ This supervisor is not assigned to the source grade.',
-        ], 403);
+            'success' => true,
+            'message' => 'Supervisor moved successfully from the old grade level to the new grade level.'
+        ], 200);
     }
 
-    if (!is_null($toGrade->supervisor_id)) {
+
+    /**
+     * Get all grade levels with their supervisors
+     */
+    public function index()
+    {
+        $gradeLevels = GradeLevel::with('supervisor')
+            ->orderBy('id')
+            ->get();
+
         return response()->json([
-            'message' => '⚠️ The target grade already has a supervisor.',
-        ], 409);
+            'success' => true,
+            'data' => $gradeLevels
+        ], 200);
     }
 
-    // تجريد المشرف من الصف القديم
-    $fromGrade->update(['supervisor_id' => null]);
 
-    // تعيين المشرف على الصف الجديد
-    $toGrade->update(['supervisor_id' => $supervisorId]);
+    /**
+     * Get all supervisors with their grade levels
+     */
+    public function supervisors()
+    {
+        $supervisors = Supervisor::with('gradeLevels')
+            ->orderBy('id')
+            ->get();
 
-    // تحديث الشعب المرتبطة بالصف القديم لإزالة المشرف
-    DB::table('class_rooms')
-        ->where('grade_id', $fromGrade->id)
-        ->where('supervisor_id', $supervisorId)
-        ->update(['supervisor_id' => null]);
+        return response()->json([
+            'success' => true,
+            'data' => $supervisors
+        ], 200);
+    }
 
-    // تحديث الشعب المرتبطة بالصف الجديد لإضافة المشرف
-    DB::table('class_rooms')
-        ->where('grade_id', $toGrade->id)
-        ->update(['supervisor_id' => $supervisorId]);
 
-    return response()->json([
-        'message' => '✅ Supervisor moved successfully and class rooms updated.',
-    ]);
+    /**
+     * Get one supervisor with all assigned grade levels
+     */
+    public function showSupervisor($supervisorId)
+    {
+        $supervisor = Supervisor::with('gradeLevels')
+            ->find($supervisorId);
+
+        if (!$supervisor) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Supervisor not found.'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $supervisor
+        ], 200);
+    }
+
+
+    /**
+     * Get one grade level with its supervisor
+     */
+    public function showGrade($gradeId)
+    {
+        $gradeLevel = GradeLevel::with('supervisor')
+            ->find($gradeId);
+
+        if (!$gradeLevel) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Grade level not found.'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $gradeLevel
+        ], 200);
+    }
 }
-
-}
-

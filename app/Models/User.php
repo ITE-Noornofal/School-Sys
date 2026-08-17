@@ -2,59 +2,46 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Spatie\Permission\Traits\HasRoles;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable,HasRoles,HasApiTokens;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array<int, string>
-     */
-   protected $fillable = [
-    'Full_name',
-    'father_name',
-    'mother_name',
-    'phone_number',
-    'gender',
-    'birth_date',
-    'address',
-    'academic_year',
-    'email',
-    'password',
-];
-    public function student()
-{
-    return $this->hasOne(Student::class);
-}
+    protected $fillable = [
+        'Full_name',
+        'father_name',
+        'mother_name',
+        'phone_number',
+        'gender',
+        'birth_date',
+        'address',
+        'academic_year',
+        'email',
+        'password',
+        'role',
+    ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var array<int, string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            // لا نضع password => hashed هنا
+            // لأننا نستخدم Hash::make() في Controller
         ];
+    }
+
+    public function student()
+    {
+        return $this->hasOne(Student::class);
     }
 }

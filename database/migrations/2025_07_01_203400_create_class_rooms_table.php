@@ -10,12 +10,14 @@ return new class extends Migration
     {
         Schema::create('class_rooms', function (Blueprint $table) {
             $table->id();
+
             $table->string('name');
 
-            // ← تغيير من grades إلى grade_levels
-            $table->foreignId('grade_level_id')  // ← أو حافظ على grade_id لكن عدّل الـ constrained
-                  ->constrained('grade_levels')   // ← تحديد الجدول صراحة
-                  ->onDelete('cascade');
+            $table->string('section')->nullable();
+
+            $table->foreignId('grade_id')
+                ->constrained('grade_levels')
+                ->onDelete('cascade');
 
             $table->timestamps();
         });
