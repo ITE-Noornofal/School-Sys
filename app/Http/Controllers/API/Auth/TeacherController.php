@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use App\Models\Teacher;
 use App\Models\User;
+use Illuminate\Support\Facades\Schema;
 
 class TeacherController extends Controller
 {
@@ -94,16 +95,6 @@ class TeacherController extends Controller
         |--------------------------------------------------------------------------
         | users هو جدول الحسابات الموحد
         |--------------------------------------------------------------------------
-        |
-        | حسب migration الخاص بك:
-        |
-        | Full_name
-        | phone_number
-        | address
-        | email
-        | password
-        | role
-        |
         */
 
         $user = User::updateOrCreate(
@@ -113,7 +104,10 @@ class TeacherController extends Controller
             [
                 'Full_name' => $teacher->name,
                 'password' => $teacher->password,
+
+                // الدور في النظام الموحد
                 'role' => 'teacher',
+
                 'phone_number' => $teacher->phone,
                 'address' => $teacher->address,
             ]
@@ -123,21 +117,26 @@ class TeacherController extends Controller
         // ربط teacher بـ user
         // =====================================================
 
-        if (\Schema::hasColumn('teachers', 'user_id')) {
+        if (Schema::hasColumn('teachers', 'user_id')) {
             $teacher->user_id = $user->id;
             $teacher->save();
         }
 
         // =====================================================
-        // SPATIE ROLE
+        // ملاحظة مهمة
         // =====================================================
-
-        if (method_exists($user, 'assignRole')) {
-
-            if (!$user->hasRole('teacher')) {
-                $user->assignRole('teacher');
-            }
-        }
+        // لا نستخدم:
+        //
+        // $user->assignRole('teacher');
+        //
+        // لأن User يستخدم guard = web
+        // بينما Role teacher في Seeder يستخدم guard = teacher.
+        //
+        // النظام الموحد يعتمد على:
+        //
+        // $user->role = 'teacher';
+        //
+        // لذلك لا نحتاج assignRole هنا.
 
         // =====================================================
         // TOKEN
@@ -149,7 +148,7 @@ class TeacherController extends Controller
 
         // =====================================================
         // RESPONSE
-        // =====================================================
+        // =========================================================
 
         return response()->json([
             'status' => 'success',
@@ -178,13 +177,13 @@ class TeacherController extends Controller
     /*
     |--------------------------------------------------------------------------
     | ملاحظة:
-    | هذا الـ Login موجود للحفاظ على الـ API القديم.
+    | هذا Login موجود للحفاظ على الـ API القديم.
     | لكن في النظام الجديد يفضل استخدام:
     |
     | POST /api/login
     |
     | من UnifiedAuthController
-    |
+    |--------------------------------------------------------------------------
     */
 
     public function login(Request $request)
@@ -489,17 +488,11 @@ class TeacherController extends Controller
                 ],
 
                 'teacher' => [
-
                     'id' => $teacher->id,
-
                     'name' => $teacher->name,
-
                     'email' => $teacher->email,
-
                     'subject' => $teacher->subject,
-
                     'address' => $teacher->address,
-
                     'phone' => $teacher->phone,
 
                     'profile_image' => $teacher->profile_image

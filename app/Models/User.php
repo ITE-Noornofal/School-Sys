@@ -12,6 +12,11 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable, HasRoles;
 
+    /**
+     * Guard المستخدم مع Spatie Permission
+     */
+    protected string $guard_name = 'api';
+
     protected $fillable = [
         'Full_name',
         'father_name',
@@ -35,10 +40,14 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            // لا نضع password => hashed هنا
-            // لأننا نستخدم Hash::make() في Controller
         ];
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Student
+    |--------------------------------------------------------------------------
+    */
 
     public function student()
     {
